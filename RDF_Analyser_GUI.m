@@ -8,7 +8,7 @@ function varargout = RDF_Analyser_GUI(varargin)
     % the tool, please see the PDF User Manual. This program is free
     % software, covered under the terms of GNU General Public License v3.
 %
-    % Copyright (c) v1.0 [2016] --------------------------------------------------------
+    % [v1.1] Copyright (c) 2016 --------------------------------------------------------
     % Janaki Shanmugam & Konstantin B. Borisenko
     % Electron Image Analysis Group, Department of Materials
     % University of Oxford
@@ -74,19 +74,21 @@ handles.e2 = 0;
 handles.e3 = 0;
 handles.e4 = 0;
 handles.e5 = 0;
-handles.q_fixed = 0;
+handles.q_fix = 0;
 handles.dq = 0.1;
 handles.N = 100;
 handles.dN = 100;
-handles.damping = 0.5;
+handles.damping = 0.3;
 handles.paramK = load('Kirkland_2010.txt','-ascii');
 handles.param_val = 2;
 handles.rmax = 10;
+handles.AFrange = 0; %Autofit over full q range
+
 % display default values used for fitting
-set(handles.text_q_fit, 'String', handles.q_fixed);
+set(handles.text_q_fit, 'String', handles.q_fix);
 set(handles.text_N, 'String', handles.N);
 set(handles.text_damping, 'String', handles.damping);
-set(handles.popup_param, 'Value', 2);
+set(handles.popup_param, 'Value', 2); %Kirkland
 
 set(handles.Tab1,'Value',1); %depressed Tab1
 % Update handles structure
@@ -108,13 +110,14 @@ function About_ClickedCallback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 (msgbox...
-    ({'eRDF Analyser is distributed in the hope that it will be useful, but'...
-    'without any warranty. This program is free software and you are welcome'...
-    'to redistribute it under certain conditions.'...
-    'See the GNU General Public License for more details'...
-    '(http://www.gnu.org/licenses/).',...
-    'Copyright (c) 2016; J Shanmugam, KB Borisenko'},...
-    'About eRDF Analyser'));
+    ({'eRDF Analyser is distributed in the hope that it will be useful,'... 
+    'but without any warranty. This program is free software and'... 
+    'you are welcome to redistribute it under certain conditions.'...
+    'See the GNU General Public License for more details:'...
+    '(http://www.gnu.org/licenses/).'...
+    ''...
+    '[v1.1] Copyright (c) 2016'... 
+    'J Shanmugam, KB Borisenko'},'About eRDF Analyser'));
 % --------------------------------------------------------------------
 
 % --- Executes on button press in Tab1.
@@ -484,7 +487,7 @@ switch choice
         end;
         delete(ProgBar);
         
-        [optval,optxys]=min(ssum(:));
+        [~,optxys]=min(ssum(:));
 
         % Optimised centre
         [optxs,optys]=ind2sub(size(ssum),optxys);
@@ -817,9 +820,9 @@ d1 = handles.d1;
 d2 = handles.d2;
 
 % beginning of data range
-d1b = (d2-d1)/4 + d1;
+d1b = uint16((d2-d1)/4 + d1);
 % end of data range
-d2a = d2 - (d2-d1)/4;
+d2a = uint16(d2 - (d2-d1)/4);
 
 % new range of data points to be analysed
 beginning = handles.dat(d1:d1b);
@@ -875,6 +878,10 @@ handles.s = s;
 % s^2
 s2 = s.^2;
 handles.s2 = s2;
+
+% Length of s/q
+L = uint16(length(q));
+handles.L = L;
 
 guidata(hObject,handles)
 
@@ -1231,8 +1238,8 @@ guidata(hObject,handles)
 % ----------------------------------------------------------------------
 % -----------------------------------------------------------------------
 % --- Executes during object creation, after setting all properties.
-function N_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to N (see GCBO)
+function edit_N_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to edit_N (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    empty - handles not created until after all CreateFcns called
 
@@ -1242,13 +1249,13 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-function N_Callback(hObject, eventdata, handles)
-% hObject    handle to N (see GCBO)
+function edit_N_Callback(hObject, eventdata, handles)
+% hObject    handle to edit_N (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-% Hints: get(hObject,'String') returns contents of N as text
-%        str2double(get(hObject,'String')) returns contents of N as a double
+% Hints: get(hObject,'String') returns contents of edit_N as text
+%        str2double(get(hObject,'String')) returns contents of edit_N as a double
 N = str2double(get(hObject,'String'));
 if isnan(N)
     set(hObject, 'String', 0);
@@ -1262,8 +1269,8 @@ guidata(hObject,handles)
 
 
 % --- Executes during object creation, after setting all properties.
-function dN_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to dN (see GCBO)
+function edit_dN_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to edit_dN (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    empty - handles not created until after all CreateFcns called
 
@@ -1273,13 +1280,13 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-function dN_Callback(hObject, eventdata, handles)
-% hObject    handle to dN (see GCBO)
+function edit_dN_Callback(hObject, eventdata, handles)
+% hObject    handle to edit_dN (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-% Hints: get(hObject,'String') returns contents of dN as text
-%        str2double(get(hObject,'String')) returns contents of dN as a double
+% Hints: get(hObject,'String') returns contents of edit_dN as text
+%        str2double(get(hObject,'String')) returns contents of edit_dN as a double
 dN = str2double(get(hObject,'String'));
 if isnan(dN)
     set(hObject, 'String', 0);
@@ -1296,7 +1303,7 @@ function Nplus_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 handles.N = handles.N + handles.dN;
-% print value of N in static text
+% print value of edit_N in static text
 set(handles.text_N, 'String', handles.N);
 
 guidata(hObject,handles)
@@ -1308,7 +1315,7 @@ function Nminus_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 handles.N = handles.N - handles.dN;
-% print value of N in static text
+% print value of edit_N in static text
 set(handles.text_N, 'String', handles.N);
 
 guidata(hObject,handles)
@@ -1335,22 +1342,22 @@ function q_fixed_Callback(hObject, eventdata, handles)
 % Hints: get(hObject,'String') returns contents of q_fixed as text
 %        str2double(get(hObject,'String')) returns contents of q_fixed as a double
 
-% --- q_fixed = value close to which user wants fitting to be done
-q_fixed = str2double(get(hObject,'String'));
-if isnan(q_fixed)
+% --- q_fix = value close to which user wants fitting to be done
+q_fix = str2double(get(hObject,'String'));
+if isnan(q_fix)
     set(hObject, 'String', 0);
     errordlg('Input must be a number','Error');
 end
-handles.q_fixed = q_fixed;
+handles.q_fix = q_fix;
 % print desired value of q in static text
 % actual value (data point) will update when 'Fit Data' button is pushed
-set(handles.text_q_fit, 'String', handles.q_fixed);
+set(handles.text_q_fit, 'String', handles.q_fix);
 
 guidata(hObject,handles)
 
 % --- Executes during object creation, after setting all properties.
-function dq_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to dq (see GCBO)
+function edit_dq_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to edit_dq (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    empty - handles not created until after all CreateFcns called
 
@@ -1360,13 +1367,13 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-function dq_Callback(hObject, eventdata, handles)
-% hObject    handle to dq (see GCBO)
+function edit_dq_Callback(hObject, eventdata, handles)
+% hObject    handle to edit_dq (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-% Hints: get(hObject,'String') returns contents of dq as text
-%        str2double(get(hObject,'String')) returns contents of dq as a double
+% Hints: get(hObject,'String') returns contents of edit_dq as text
+%        str2double(get(hObject,'String')) returns contents of edit_dq as a double
 
 % --- value to change q_fixed by
 dq = str2double(get(hObject,'String'));
@@ -1384,11 +1391,11 @@ function qplus_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-% --- increase q_fixed by given dq value
-handles.q_fixed = handles.q_fixed + handles.dq;
+% --- increase q_fixed by given edit_dq value
+handles.q_fix = handles.q_fix + handles.dq;
 % print desired value of q in static text
 % actual value (data point) will update when 'Fit Data' button is pushed
-set(handles.text_q_fit, 'String', handles.q_fixed);
+set(handles.text_q_fit, 'String', handles.q_fix);
 
 guidata(hObject,handles)
 
@@ -1398,11 +1405,11 @@ function qminus_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-% --- decrease q_fixed by given dq value
-handles.q_fixed = handles.q_fixed - handles.dq;
+% --- decrease q_fixed by given edit_dq value
+handles.q_fix = handles.q_fix - handles.dq;
 % print desired value of q in static text
 % actual value (data point) will update when 'Fit Data' button is pushed
-set(handles.text_q_fit, 'String', handles.q_fixed);
+set(handles.text_q_fit, 'String', handles.q_fix);
 
 guidata(hObject,handles)
 
@@ -1428,7 +1435,7 @@ function damping_Callback(hObject, eventdata, handles)
 % Hints: get(hObject,'String') returns contents of damping as text
 %        str2double(get(hObject,'String')) returns contents of damping as a double
 
-% --- set damping factor (default 0.5)
+% --- set damping factor (default 0.3)
 damping = str2double(get(hObject,'String'));
 if isnan(damping)
     set(hObject, 'String', 0);
@@ -1474,7 +1481,354 @@ guidata(hObject,handles)
 
 % -----------------------------------------------------------------------
 % -----------------------------------------------------------------------
-% --- Executes on button press in button_fit.
+
+% --- Executes when selected object is changed in AutoFitSelection.
+function AutoFitSelection_SelectionChangedFcn(hObject, eventdata, handles)
+% hObject    handle to the selected object in AutoFitSelection 
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+%	EventName: string 'SelectionChanged' (read only)
+%	OldValue: handle of the previously selected object or empty
+%	NewValue: handle of the currently selected object
+
+% User selection of q range for weighted automated fitting of atomic scattering curve
+switch get(eventdata.NewValue,'Tag')
+    case 'AutoFitOption1' %Fit over full q range - DEFAULT
+        AFrange = 0;
+    case 'AutoFitOption2' %Fit only over tail end (last 1/3 of q range)
+        AFrange = 2/3*handles.L;
+end
+handles.AFrange = AFrange; %to be read into %weights in button_AutoFit_callback
+guidata(hObject,handles)
+% -----------------------------------------------------------------------
+% -----------------------------------------------------------------------
+
+% --- Executes on button press in button_Autofit.
+function button_Autofit_Callback(hObject, eventdata, handles)
+% hObject    handle to button_Autofit (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+%% Compute gq = <f^2(q)>
+s2 = handles.s2;
+elem1 = handles.elem1;
+elem2 = handles.elem2;
+elem3 = handles.elem3;
+elem4 = handles.elem4;
+elem5 = handles.elem5;
+e1 = handles.e1;
+e2 = handles.e2;
+e3 = handles.e3;
+e4 = handles.e4;
+e5 = handles.e5;
+% compute atomic ratio (composition)
+e_tot = e1+e2+e3+e4+e5;
+e_r1 = e1/e_tot;
+e_r2 = e2/e_tot;
+e_r3 = e3/e_tot;
+e_r4 = e4/e_tot;
+e_r5 = e5/e_tot;
+handles.e_tot = e_tot;
+handles.e_r1 = e_r1;
+handles.e_r2 = e_r2;
+handles.e_r3 = e_r3;
+handles.e_r4 = e_r4;
+handles.e_r5 = e_r5;
+guidata(hObject,handles)
+
+if handles.param_val == 3 % Lobato
+
+    paramL = handles.paramL;
+    paramL_1 = paramL(elem1,:);
+    paramL_2 = paramL(elem2,:);
+    paramL_3 = paramL(elem3,:);
+    paramL_4 = paramL(elem4,:);
+    paramL_5 = paramL(elem5,:);
+    paramL_elem = [paramL_1;paramL_2;paramL_3;paramL_4;paramL_5];
+    paramL_table = array2table(paramL_elem,...
+        'VariableNames',{'A1','A2','A3','A4','A5','B1','B2','B3','B4','B5'},...
+        'RowNames',{'elem1','elem2','elem3','elem4','elem5'});
+    handles.paramL_table = paramL_table;
+    
+    A1_1 = paramL_table{'elem1','A1'};
+    A2_1 = paramL_table{'elem1','A2'};
+    A3_1 = paramL_table{'elem1','A3'};
+    A4_1 = paramL_table{'elem1','A4'};
+    A5_1 = paramL_table{'elem1','A5'};
+    B1_1 = paramL_table{'elem1','B1'};
+    B2_1 = paramL_table{'elem1','B2'};
+    B3_1 = paramL_table{'elem1','B3'};
+    B4_1 = paramL_table{'elem1','B4'};
+    B5_1 = paramL_table{'elem1','B5'};
+
+    f1 = ((s2*B1_1+1).^2).\(A1_1*(s2*B1_1+2))+((s2*B2_1+1).^2).\(A2_1*(s2*B2_1+2))+((s2*B3_1+1).^2).\(A3_1*(s2*B3_1+2))+((s2*B4_1+1).^2).\(A4_1*(s2*B4_1+2))+((s2*B5_1+1).^2).\(A5_1*(s2*B5_1+2));
+    
+    A1_2 = paramL_table{'elem2','A1'};
+    A2_2 = paramL_table{'elem2','A2'};
+    A3_2 = paramL_table{'elem2','A3'};
+    A4_2 = paramL_table{'elem2','A4'};
+    A5_2 = paramL_table{'elem2','A5'};
+    B1_2 = paramL_table{'elem2','B1'};
+    B2_2 = paramL_table{'elem2','B2'};
+    B3_2 = paramL_table{'elem2','B3'};
+    B4_2 = paramL_table{'elem2','B4'};
+    B5_2 = paramL_table{'elem2','B5'};
+    
+    f2 = ((s2*B1_2+1).^2).\(A1_2*(s2*B1_2+2))+((s2*B2_2+1).^2).\(A2_2*(s2*B2_2+2))+((s2*B3_2+1).^2).\(A3_2*(s2*B3_2+2))+((s2*B4_2+1).^2).\(A4_2*(s2*B4_2+2))+((s2*B5_2+1).^2).\(A5_2*(s2*B5_2+2));
+
+    A1_3 = paramL_table{'elem3','A1'};
+    A2_3 = paramL_table{'elem3','A2'};
+    A3_3 = paramL_table{'elem3','A3'};
+    A4_3 = paramL_table{'elem3','A4'};
+    A5_3 = paramL_table{'elem3','A5'};
+    B1_3 = paramL_table{'elem3','B1'};
+    B2_3 = paramL_table{'elem3','B2'};
+    B3_3 = paramL_table{'elem3','B3'};
+    B4_3 = paramL_table{'elem3','B4'};
+    B5_3 = paramL_table{'elem3','B5'};
+    
+    f3 = ((s2*B1_3+1).^2).\(A1_3*(s2*B1_3+2))+((s2*B2_3+1).^2).\(A2_3*(s2*B2_3+2))+((s2*B3_3+1).^2).\(A3_3*(s2*B3_3+2))+((s2*B4_3+1).^2).\(A4_3*(s2*B4_3+2))+((s2*B5_3+1).^2).\(A5_3*(s2*B5_3+2));
+
+    A1_4 = paramL_table{'elem4','A1'};
+    A2_4 = paramL_table{'elem4','A2'};
+    A3_4 = paramL_table{'elem4','A3'};
+    A4_4 = paramL_table{'elem4','A4'};
+    A5_4 = paramL_table{'elem4','A5'};
+    B1_4 = paramL_table{'elem4','B1'};
+    B2_4 = paramL_table{'elem4','B2'};
+    B3_4 = paramL_table{'elem4','B3'};
+    B4_4 = paramL_table{'elem4','B4'};
+    B5_4 = paramL_table{'elem4','B5'};
+    
+    f4 = ((s2*B1_4+1).^2).\(A1_4*(s2*B1_4+2))+((s2*B2_4+1).^2).\(A2_4*(s2*B2_4+2))+((s2*B3_4+1).^2).\(A3_4*(s2*B3_4+2))+((s2*B4_4+1).^2).\(A4_4*(s2*B4_4+2))+((s2*B5_4+1).^2).\(A5_4*(s2*B5_4+2));
+    
+    A1_5 = paramL_table{'elem5','A1'};
+    A2_5 = paramL_table{'elem5','A2'};
+    A3_5 = paramL_table{'elem5','A3'};
+    A4_5 = paramL_table{'elem5','A4'};
+    A5_5 = paramL_table{'elem5','A5'};
+    B1_5 = paramL_table{'elem5','B1'};
+    B2_5 = paramL_table{'elem5','B2'};
+    B3_5 = paramL_table{'elem5','B3'};
+    B4_5 = paramL_table{'elem5','B4'};
+    B5_5 = paramL_table{'elem5','B5'};
+
+    f5 = ((s2*B1_5+1).^2).\(A1_5*(s2*B1_5+2))+((s2*B2_5+1).^2).\(A2_5*(s2*B2_5+2))+((s2*B3_5+1).^2).\(A3_5*(s2*B3_5+2))+((s2*B4_5+1).^2).\(A4_5*(s2*B4_5+2))+((s2*B5_5+1).^2).\(A5_5*(s2*B5_5+2));
+    
+else % Kirkland   
+   
+    paramK = handles.paramK;
+    paramK_1 = paramK(elem1,:);
+    paramK_2 = paramK(elem2,:);
+    paramK_3 = paramK(elem3,:);
+    paramK_4 = paramK(elem4,:);
+    paramK_5 = paramK(elem5,:);
+    paramK_elem = [paramK_1;paramK_2;paramK_3;paramK_4;paramK_5];
+    paramK_table = array2table(paramK_elem,...
+        'VariableNames',{'a1','b1','a2','b2','a3','b3','c1','d1','c2','d2','c3','d3'},...
+        'RowNames',{'elem1','elem2','elem3','elem4','elem5'});
+    handles.paramK_table = paramK_table;
+    
+    a1_1 = paramK_table{'elem1','a1'};
+    a2_1 = paramK_table{'elem1','a2'};
+    a3_1 = paramK_table{'elem1','a3'};
+    b1_1 = paramK_table{'elem1','b1'};
+    b2_1 = paramK_table{'elem1','b2'};
+    b3_1 = paramK_table{'elem1','b3'};
+    c1_1 = paramK_table{'elem1','c1'};
+    c2_1 = paramK_table{'elem1','c2'};
+    c3_1 = paramK_table{'elem1','c3'};
+    d1_1 = paramK_table{'elem1','d1'};
+    d2_1 = paramK_table{'elem1','d2'};
+    d3_1 = paramK_table{'elem1','d3'};
+    
+    f1 = ((s2+b1_1).\a1_1)+((s2+b2_1).\a2_1)+((s2+b3_1).\a3_1)+(exp(-s2.*d1_1).*c1_1)+(exp(-s2.*d2_1).*c2_1)+(exp(-s2.*d3_1).*c3_1);
+    
+    a1_2 = paramK_table{'elem2','a1'};
+    a2_2 = paramK_table{'elem2','a2'};
+    a3_2 = paramK_table{'elem2','a3'};
+    b1_2 = paramK_table{'elem2','b1'};
+    b2_2 = paramK_table{'elem2','b2'};
+    b3_2 = paramK_table{'elem2','b3'};
+    c1_2 = paramK_table{'elem2','c1'};
+    c2_2 = paramK_table{'elem2','c2'};
+    c3_2 = paramK_table{'elem2','c3'};
+    d1_2 = paramK_table{'elem2','d1'};
+    d2_2 = paramK_table{'elem2','d2'};
+    d3_2 = paramK_table{'elem2','d3'};
+    
+    f2 = ((s2+b1_2).\a1_2)+((s2+b2_2).\a2_2)+((s2+b3_2).\a3_2)+(exp(-s2.*d1_2).*c1_2)+(exp(-s2.*d2_2).*c2_2)+(exp(-s2.*d3_2).*c3_2);
+        
+    a1_3 = paramK_table{'elem3','a1'};
+    a2_3 = paramK_table{'elem3','a2'};
+    a3_3 = paramK_table{'elem3','a3'};
+    b1_3 = paramK_table{'elem3','b1'};
+    b2_3 = paramK_table{'elem3','b2'};
+    b3_3 = paramK_table{'elem3','b3'};
+    c1_3 = paramK_table{'elem3','c1'};
+    c2_3 = paramK_table{'elem3','c2'};
+    c3_3 = paramK_table{'elem3','c3'};
+    d1_3 = paramK_table{'elem3','d1'};
+    d2_3 = paramK_table{'elem3','d2'};
+    d3_3 = paramK_table{'elem3','d3'};
+    
+    f3 = ((s2+b1_3).\a1_3)+((s2+b2_3).\a2_3)+((s2+b3_3).\a3_3)+(exp(-s2.*d1_3).*c1_3)+(exp(-s2.*d2_3).*c2_3)+(exp(-s2.*d3_3).*c3_3);
+    
+    a1_4 = paramK_table{'elem4','a1'};
+    a2_4 = paramK_table{'elem4','a2'};
+    a3_4 = paramK_table{'elem4','a3'};
+    b1_4 = paramK_table{'elem4','b1'};
+    b2_4 = paramK_table{'elem4','b2'};
+    b3_4 = paramK_table{'elem4','b3'};
+    c1_4 = paramK_table{'elem4','c1'};
+    c2_4 = paramK_table{'elem4','c2'};
+    c3_4 = paramK_table{'elem4','c3'};
+    d1_4 = paramK_table{'elem4','d1'};
+    d2_4 = paramK_table{'elem4','d2'};
+    d3_4 = paramK_table{'elem4','d3'};
+    
+    f4 = ((s2+b1_4).\a1_4)+((s2+b2_4).\a2_4)+((s2+b3_4).\a3_4)+(exp(-s2.*d1_4).*c1_4)+(exp(-s2.*d2_4).*c2_4)+(exp(-s2.*d3_4).*c3_4);
+    
+    a1_5 = paramK_table{'elem5','a1'};
+    a2_5 = paramK_table{'elem5','a2'};
+    a3_5 = paramK_table{'elem5','a3'};
+    b1_5 = paramK_table{'elem5','b1'};
+    b2_5 = paramK_table{'elem5','b2'};
+    b3_5 = paramK_table{'elem5','b3'};
+    c1_5 = paramK_table{'elem5','c1'};
+    c2_5 = paramK_table{'elem5','c2'};
+    c3_5 = paramK_table{'elem5','c3'};
+    d1_5 = paramK_table{'elem5','d1'};
+    d2_5 = paramK_table{'elem5','d2'};
+    d3_5 = paramK_table{'elem5','d3'};
+    
+    f5 = ((s2+b1_5).\a1_5)+((s2+b2_5).\a2_5)+((s2+b3_5).\a3_5)+(exp(-s2.*d1_5).*c1_5)+(exp(-s2.*d2_5).*c2_5)+(exp(-s2.*d3_5).*c3_5);
+end
+fq = (f1.*e_r1) + (f2.*e_r2) + (f3.*e_r3) + (f4.*e_r4) + (f5.*e_r5);
+fq_sq = fq.^2;
+handles.fq_sq = fq_sq;
+
+gq = (f1.^2*e_r1) + (f2.^2*e_r2) + (f3.^2*e_r3) + (f4.^2*e_r4) + (f5.^2*e_r5);
+handles.gq = gq;
+guidata(hObject,handles)
+
+%% Auto Fit atomic scattering curve = N*gq+C 
+Iq = handles.I;
+gq = handles.gq;
+q = handles.q;
+L = handles.L;
+
+% Selection of weights based on AutoFitSelection
+wi = ones(L,1);
+AFrange = handles.AFrange; %retrieve user selection or use default
+wi(1:AFrange) = 0; 
+
+% qmax: point where fitted curve crosses Iq curve 
+[qmax,qpos] = max(q); %value and array position of qmax
+fqfit = gq(qpos);
+iqfit = Iq(qpos);
+
+a1 = sum(wi.*gq.*Iq);
+a2 = sum(wi.*Iq*fqfit);
+a3 = sum(wi.*gq*iqfit);
+a4 = sum(wi)*fqfit*iqfit;
+a5 = sum(wi.*gq.^2);
+a6 = 2*sum(wi.*gq*fqfit);
+a7 = sum(wi)*fqfit*fqfit;
+
+N = (a1-a2-a3+a4)/(a5-a6+a7);
+C = iqfit-N*fqfit;
+
+Autofit = N*gq+C;
+handles.Autofit = Autofit;
+handles.N = N;
+guidata(hObject,handles)
+
+% Plot auto fit curve
+axes(handles.axes4);
+plot(handles.q,handles.I,'b',handles.q,handles.Autofit,'r');
+xlabel('q(Å^{-1})');
+ylabel('I(q)');
+legend('I(q)','I(q)_f_i_t_t_e_d');
+
+% Plot magnified view
+q2 = handles.q(L/2:L);
+handles.q2 = q2;
+handles.mag_dat = handles.I(L/2:L);
+handles.mag_fit = handles.Autofit(L/2:L);
+
+axes(handles.axes5);
+plot(handles.q2,handles.mag_dat,'b',handles.q2,handles.mag_fit,'r');
+xlabel('q(Å^{-1})');
+ylabel('I(q)');
+legend('I(q)','I(q)_f_i_t_t_e_d');
+
+% goodness of fit (sum of squared deviations)
+SS = sprintf('%12.6e',sum((handles.I-handles.Autofit).^2));
+% update values of parameters on GUI
+set(handles.text_SS, 'String', SS);
+set(handles.text_N, 'String', handles.N);
+set(handles.edit_N,'String',handles.N);
+set(handles.text_q_fit, 'String', qmax);
+handles.q_fix = qmax;
+set(handles.q_fixed, 'String', handles.q_fix);
+
+guidata(hObject,handles)
+% ----------------------------------------------------------------------
+q = handles.q;
+I = handles.I;
+s = handles.s;
+s2 = handles.s2;
+ds = handles.ds;
+fq_sq = handles.fq_sq;
+N = handles.N;
+Autofit = handles.Autofit;
+damping = handles.damping;
+
+% Plot phiq and damped phiq
+phiq = ((I - Autofit).*s)./(N*fq_sq);
+handles.phiq = phiq;
+
+phiq_damp = phiq.*exp(-s2.*damping);
+handles.phiq_damp = phiq_damp;
+
+axes(handles.axes6);
+plot(q,phiq,'b',q,phiq_damp,'r');
+xlabel('q(Å^{-1})');
+ylabel('\phi(q)');
+legend('\phi(q)','\phi(q)_d_a_m_p_e_d');
+% plot reference line at phiq=zero
+xlim = get(handles.axes6, 'xlim');
+hold on
+plot([xlim(1) xlim(2)], [0 0],'k'); 
+hold off
+
+% ----------------------------------------------------------------------
+% Plot Gr
+rmax = handles.rmax;
+r = 0.01:0.01:rmax;
+handles.r = r;
+
+Gr = 8 * pi * phiq_damp'* sin(q*r) * ds ;
+handles.Gr = Gr;
+
+axes(handles.axes7);
+plot(r,Gr);
+xlabel('r(Å)');
+ylabel('G(r)');
+% plot reference line at Gr=zero
+xlim = get(handles.axes7, 'xlim');
+hold on
+plot([xlim(1) xlim(2)], [0 0],'k'); 
+hold off
+
+% to export results from Autofit without manual optimisation
+handles.fit = handles.Autofit;
+guidata(hObject,handles)
+% -----------------------------------------------------------------------
+
+% -----------------------------------------------------------------------
+% -----------------------------------------------------------------------
+% --- Executes on button press in button_fit (Manual Fit)
 function button_fit_Callback(hObject, eventdata, handles)
 % hObject    handle to button_fit (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
@@ -1482,7 +1836,7 @@ function button_fit_Callback(hObject, eventdata, handles)
 
 %% find maximum q value smaller than q_fixed
 tri = delaunayn(handles.q);
-q_index = dsearchn(handles.q,tri,handles.q_fixed);
+q_index = dsearchn(handles.q,tri,handles.q_fix);
 q_fit = handles.q(q_index);
 % display q value at which fitting is done
 set(handles.text_q_fit, 'String', q_fit);
@@ -1701,7 +2055,7 @@ guidata(hObject,handles)
 f = find(handles.q == handles.q_fit);
 C = handles.I(f) - handles.gq(f)*handles.N;
 
-%% Compute fitting curve N*gq+C
+%% Compute fitting curve edit_N*gq+C
 fit = handles.N*handles.gq + C;
 handles.fit = fit;
 
@@ -1713,7 +2067,7 @@ ylabel('I(q)');
 legend('I(q)','I(q)_f_i_t_t_e_d');
 
 % Plot magnified view
-L = length(handles.q);
+L = uint16(length(handles.q));
 q2 = handles.q(L/2:L);
 handles.q2 = q2;
 handles.mag_dat = handles.I(L/2:L);
@@ -1725,10 +2079,9 @@ xlabel('q(Å^{-1})');
 ylabel('I(q)');
 legend('I(q)','I(q)_f_i_t_t_e_d');
 
-% goodness of fitting
-R_sq = sum((handles.I - handles.fit).^2/handles.fit);
-set(handles.text_R_sq, 'String', R_sq);
-handles.R_sq = R_sq;
+% goodness of fit (sum of squared deviations)
+SS2 = sprintf('%12.6e',sum((handles.I-handles.fit).^2));
+set(handles.text_SS,  'String', SS2);
 
 guidata(hObject,handles)
 % ----------------------------------------------------------------------
@@ -1807,7 +2160,7 @@ T2 = table(r,Gr,...
 
 % retrieve fitting parameters
 ds = handles.ds;
-q_fixed = handles.q_fixed;
+q_fixed = handles.q_fix;
 N = handles.N;
 damping = handles.damping;
 EName1 = handles.EName1;
@@ -1868,7 +2221,7 @@ T2 = table(r,Gr,...
 
 % retrieve fitting parameters
 ds = handles.ds;
-q_fixed = handles.q_fixed;
+q_fixed = handles.q_fix;
 N = handles.N;
 damping = handles.damping;
 EName1 = handles.EName1;
