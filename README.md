@@ -5,7 +5,7 @@ eRDF Analyser is an interactive and integrated tool for electron reduced density
 
 This tool is available as open source code and in open executable form (both covered under the terms of the GNU General Public License version 3). 
 
-eRDFAnalyser GUI can be run in MATLAB - version 1.1 was written in R2015a/b and has been tested up to R2016a. The executable (.exe on Windows only) requires MATLAB Runtime version 9.0 (2015b) to run - this can be downloaded from http://www.mathworks.com/products/compiler/mcr/index.html (one-time installation).
+eRDFAnalyser GUI can be run in MATLAB - it was written in R2015a/b and has been tested up to R2016a on Windows/Mac OS. This requires the following files to run: 'RDF_Analyser_GUI.fig', 'RDF_Analyser_GUI.m', 'Kirkland_2010'.txt and 'Lobato_2014.txt'. All files can be found in Release Downloads. The executable (eRDFAnalyser.exe) runs on Windows OS only. It requires MATLAB Runtime version 9.0 (2015b) to run - this can be downloaded from http://www.mathworks.com/products/compiler/mcr/index.html (one-time installation).
 
 Contact Information:
 
