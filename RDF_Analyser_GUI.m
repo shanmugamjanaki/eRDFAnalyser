@@ -8,7 +8,7 @@ function varargout = RDF_Analyser_GUI(varargin)
     % the tool, please see the PDF User Manual. This program is free
     % software, covered under the terms of GNU General Public License v3.
 %
-    % [v1.1] Copyright (c) 2016 --------------------------------------------------------
+    % Copyright (c) 2017 --------------------------------------------------------
     % Janaki Shanmugam & Konstantin B. Borisenko
     % Electron Image Analysis Group, Department of Materials
     % University of Oxford
@@ -66,8 +66,9 @@ function RDF_Analyser_GUI_OpeningFcn(hObject, eventdata, handles, varargin)
 % Choose default command line output for RDF_Analyser_GUI
 handles.output = hObject;
 
-% --- Default values to be used for fitting
-% (in case edit box callback functions are not executed)
+% --- Default values to be used
+set(handles.Tab1,'Value',1); %depressed Tab1
+% in case edit box callback functions are not executed
 handles.ds = 1;
 handles.e1 = 0;
 handles.e2 = 0;
@@ -82,7 +83,10 @@ handles.damping = 0.3;
 handles.paramK = load('Kirkland_2010.txt','-ascii');
 handles.param_val = 2;
 handles.rmax = 10;
-handles.AFrange = 0; %Autofit over full q range
+
+% radio button groups - default selection
+set(handles.uibuttongroup_DP,'SelectedObject',handles.Amorphous); % centre optimisation routine
+set(handles.AutoFitSelection,'SelectedObject',handles.AutoFitOption1); % Fit over full q range
 
 % display default values used for fitting
 set(handles.text_q_fit, 'String', handles.q_fix);
@@ -90,7 +94,6 @@ set(handles.text_N, 'String', handles.N);
 set(handles.text_damping, 'String', handles.damping);
 set(handles.popup_param, 'Value', 2); %Kirkland
 
-set(handles.Tab1,'Value',1); %depressed Tab1
 % Update handles structure
 guidata(hObject, handles);
 
@@ -116,7 +119,7 @@ function About_ClickedCallback(hObject, eventdata, handles)
     'See the GNU General Public License for more details:'...
     '(http://www.gnu.org/licenses/).'...
     ''...
-    '[v1.1] Copyright (c) 2016'... 
+    'Copyright (c) 2016'... 
     'J Shanmugam, KB Borisenko'},'About eRDF Analyser'));
 % --------------------------------------------------------------------
 
@@ -168,7 +171,7 @@ function ds_Callback(hObject, eventdata, handles)
 % --- ds: Calibration factor input
 ds = str2double(get(hObject,'String'));
 if isnan(ds)
-    set(hObject, 'String', 0);
+    set(hObject, 'String', 1);
     errordlg('Input must be a number','Error');
 end
 handles.ds = ds;
@@ -185,6 +188,10 @@ function button_OpenDP_Callback(hObject, eventdata, handles)
 
 % Choose data from input file (diffraction pattern image as text file)
 [fname,pname] = uigetfile({'*.txt','Text files';'*.*','All files (*.*)';},'Choose input data file');
+if fname == 0
+	% User clicked the Cancel button.
+	return;
+end
 addpath(pname);
 rehash toolboxcache;
 handles.pname = pname;
@@ -201,21 +208,22 @@ ny = size(dptxt,2);
 ig = log(abs(dptxt)+1);
 plim = mat2gray(ig);
 DPfig = figure('Name','Diffraction Pattern','NumberTitle','off');
-imshow(imadjust(plim),'InitialMagnification',25);
+imshow(imadjust(plim));
 
 % Use median filter to remove single pixel noise
-user_response = questdlg('Do you want to use a median filter to remove salt-and-pepper noise?',...
+MedianFilter = questdlg('Do you want to use a median filter to remove salt-and-pepper noise?',...
     'Remove salt-and-pepper noise',...
-    'Yes','No','Cancel',...
-    'Cancel');
-switch user_response
+    'Yes','No',...
+    'Yes');
+switch MedianFilter
     case 'Yes'
 	% Apply median filter to remove single pixel noise
 	dp = medfilt2(dptxt);
-    % For better visualisation
+    % For visualisation
     ig = log(abs(dp)+1);
     plim = mat2gray(ig);
-    imshow(imadjust(plim),'InitialMagnification',25);
+    figure(DPfig);
+    imshow(imadjust(plim));
     case 'No'
 	% take no action
     dp = dptxt;
@@ -225,8 +233,12 @@ end
 %% Mask beam stop
 % ------------------------------------------------------
 % Alert user to mask beam stop with freehand mask
-uiwait(msgbox('Click and drag to draw a freehand ROI to mask beam stop',...
-    'Mask beam stop'));
+uiwait(msgbox({'Click and drag to draw a freehand ROI to mask beamstop';
+    'or any desired region. If not, click anywhere in figure.'},...
+    'Masking'));
+FreeMask = 1; %--- while loop (to create additional Masks)
+while FreeMask == 1;
+    
 % Create freehand ROI
 hFH = imfreehand();
 binaryMask = hFH.createMask();
@@ -237,450 +249,595 @@ ig(binaryMask) = 0;
 
 % Display the masked image
 plim = mat2gray(ig);
-imshow(imadjust(plim),'InitialMagnification',25);
-hold on;
+figure(DPfig);
+imshow(imadjust(plim));
 
+% ask user for additional masks
+AddMask = questdlg('Do you want to mask additional regions?',...
+        'Additional Masking',...
+        'No','Yes',...
+        'No');
+    switch AddMask
+        case 'No'
+            FreeMask = 0;
+            continue %--- exit while loop
+        case 'Yes'
+            FreeMask = 1;
+    end
+end
 % -------------------------------------------------------
-%% Additional Mask
-% ------------------------------------------------------
-% Alert user to create additional freehand mask if necessary
-uiwait(msgbox...
-    ('Click and drag to draw a freehand ROI to select additional mask',...
-    'Additional Mask'));
-% Create freehand ROI
-hFH = imfreehand();
-binaryMask2 = hFH.createMask();
-
-% Burn mask into image by setting it to NaN (0) wherever the mask is true.
-dp(binaryMask2) = NaN;
-ig(binaryMask2) = 0;
-
-% Display the masked image
-plim = mat2gray(ig);
-imshow(imadjust(plim),'InitialMagnification',25);
-hold on;
-% ------------------------------------------------------
 %% Find centre
 % -------------------------------------------------------
 % change colormap of diffraction pattern to colorcube
 figure(DPfig);
-colormap(colorcube);
+colormap(gca,colorcube);
 
 % Define initial centre as a centre of mass
 
-dpm=dptxt;
-dpm(binaryMask)=0;
-tint=sum(sum(dpm));
-[xlc,ylc]=meshgrid(1:ny,1:nx);
-xlm=sum(sum(xlc.*dpm));
-ylm=sum(sum(ylc.*dpm));
-xc=xlm/tint;
-yc=ylm/tint;
+dpm = dptxt;
+dpm(binaryMask) = 0;
+tint = sum(sum(dpm));
+[xlc,ylc] = meshgrid(1:ny,1:nx);
+xlm = sum(sum(xlc.*dpm));
+ylm = sum(sum(ylc.*dpm));
+xc = xlm/tint;
+yc = ylm/tint;
 
-xmid=0.5*nx;
-% ymid=0.5*ny;
+xmid = 0.5*nx;
+% ymid = 0.5*ny;
 diameter = 0.5*xmid;
 radius = 0.5*diameter;
 xMin= xc - radius;
 yMin = yc - radius;
 
-% create ellipse
-hEllipse = imellipse(gca,[xMin, yMin, diameter, diameter]);
-hEllipse.setFixedAspectRatioMode( 'true' );
+OPT = 1; %--- while optimisation loop
+while OPT == 1
+    % create ellipse
+    hEllipse = imellipse(gca,[xMin, yMin, diameter, diameter]);
+    hEllipse.setFixedAspectRatioMode( 'true' );
 
-% Alert user to adjust ellipse position and double click when finished
-helpdlg({'Move and resize marker to define diffraction ring.',...
-    'Double-click inside ellipse once finished.'},...
-    'Adjust ellipse marker');
+    % Alert user to adjust ellipse position and double click when finished
+    helpdlg({'Move and resize marker to define diffraction ring.',...
+        'Double-click inside ellipse once finished.'},...
+        'Adjust ellipse marker');
 
-% wait for double-click -> get position
-wait(hEllipse);
-pos = hEllipse.getPosition;
+    % wait for double-click -> get position
+    wait(hEllipse);
+    pos = hEllipse.getPosition;
 
-% Plot the center and ellipse
-hold on;
-rad = 0.5*pos(3);
-dm = pos(3);
-xcentre = pos(1)+rad;
-ycentre = pos(2)+rad;
-rectangle('Position',[xcentre-rad, ycentre-rad, dm, dm], ...
-    'Curvature', [1,1], 'EdgeColor', 'white', 'LineWidth', 2);
-plot(xcentre, ycentre, 'r+', 'LineWidth', 1, 'MarkerSize', 20);
-delete(hEllipse);
-% -------------------------------------------------------
+    % Plot the center and ellipse
+    figure(DPfig);
+    hold on;
+    rad = 0.5*pos(3);
+    dm = pos(3);
+    xcentre = pos(1)+rad;
+    ycentre = pos(2)+rad;
+    Circle_User = rectangle('Position',[xcentre-rad, ycentre-rad, dm, dm], ...
+        'Curvature', [1,1], 'EdgeColor', 'white', 'LineWidth', 2);
+    Centre_User = plot(xcentre, ycentre, 'r+', 'LineWidth', 1, 'MarkerSize', 20);
+    delete(hEllipse);
+    
+    % -------------------------------------------------------
+    %% Let user choose to continue or optimise centre
+    % ------------------------------------------------------
+    % default choice: Continue with previous selection
+    Choice_Opt = questdlg('Do you want to optimise the centre position or continue?',...
+        'Optimise Centre',...
+        'Continue with selection','Run optimisation routine',...
+        'Continue with selection');
+    switch Choice_Opt
+        case 'Continue with selection'
+            OPT = 0;
+            continue %--- exit while (optimisation) loop
+            %--> continue with azimuthal average/variance routine
+        case 'Run optimisation routine'  
+            % ----------------------------------------------------                   
+            % use relevant algorithm for centre optimisation depending on
+            % user selection of DPtype (uibuttongroup_DP)
+            DPtype = get(get(handles.uibuttongroup_DP,'SelectedObject'),'Tag');
+            switch DPtype 
+                case 'Polycrystalline' %----------------------------------
+                    % CentreOpt routine #1: radial lines
+                    % ----------------------------------------------------
+                    % Input dialog for optimisation parameters
+                    prompt = {'Enter number of projections:',...
+                        'Enter distance of contour from edge (in pixels)',...
+                        'Enter size of grid scan (in pixels)'};
+                    % default values
+                    def = {'100','200','15'};
+                    opt_input = inputdlg(prompt,'Optimisation parameters',1,def);
+                    if isempty(opt_input) 
+                        % User clicked cancel
+                        OPT = 0; % exit optimisation routine
+                        figure(DPfig);
+                        delete(Circle_User);
+                        delete(Centre_User);
+                        continue
+                    end 
+                    % input values into variables
+                    nnp = str2double(opt_input{1});
+                    dedge = str2double(opt_input{2});
+                    maxshift = str2double(opt_input{3});   
+                    figure(DPfig);
+                    delete(Circle_User);
+                    % ----------------------------------------------------  
+                    % Optimize the circle position globally with upscaled precision
+                    % ----------------------------------------------------
+                    scale = 10;
 
-%% Let user choose to continue or optimise centre
-% ------------------------------------------------------
-% default choice: Continue with previous selection
-choice = questdlg('Do you want to optimise the centre position or continue?',...
-    'Optimise Centre',...
-    'Continue with selection','Run optimisation routine',...
-    'Continue with selection');
-switch choice
-    case 'Continue with selection'
-        % do nothing --> continue with azav/azvar routine
-    case 'Run optimisation routine'       
-        % Input dialog for optimisation parameters
-        prompt = {'Enter number of projections:',...
-            'Enter distance of contour from edge (in pixels)',...
-            'Enter size of grid scan (in pixels)'};
-        % default values
-        def = {'100','100','25'};
-        opt_input = inputdlg(prompt,'Optimisation parameters',1,def);
-        % input values into variables
-        nnp = str2double(opt_input{1});
-        dedge = str2double(opt_input{2});
-        maxshift = str2double(opt_input{3});            
-        % -------------------------------------------------------       
-        %Optimize the circle position globally with upscaled precision
-        % ------------------------------------------------------- 
-        scale = 10;
-        
-        % Redefine initial outline with more points between selected angles
-        amin=-85*pi/180;
-        amax=85*pi/180;
-        alpha=amin:(amax-amin)/(nnp-1):amax;
-        outline=zeros(nnp,2);
-        outline(:,1)=rad*cos(alpha)+xcentre;
-        outline(:,2)=rad*sin(alpha)+ycentre;
+                    % Redefine initial outline with more points between selected angles
+                    amin=-85*pi/180;
+                    amax=85*pi/180;
+                    alpha=amin:(amax-amin)/(nnp-1):amax;
+                    outline=zeros(nnp,2);
+                    outline(:,1)=rad*cos(alpha)+xcentre;
+                    outline(:,2)=rad*sin(alpha)+ycentre;
 
-        % Coordinates of the line scans
-        sl=zeros(nnp,1);
-        cc=zeros(nnp,1);
-        
-        hold all;
-        for nn=1:nnp
-            vv=outline(nn,1)-xcentre;
-            sl(nn)=(outline(nn,2)-ycentre)/vv;
-            cc(nn)=scale*(outline(nn,2)-sl(nn)*outline(nn,1));
-        end;
+                    % Coordinates of the line scans
+                    sl=zeros(nnp,1);
+                    cc=zeros(nnp,1);
 
-        % The largest full circle in original scaling
-        % Distances from centre close the dedge distance from the edge
-
-        edist=zeros(4,1);
-        edist(1)=abs(nx-xcentre)-dedge;
-        edist(2)=abs(ny-ycentre)-dedge;
-        edist(3)=xcentre-dedge;
-        edist(4)=ycentre-dedge;
-
-        maxrad=min(edist);
-        maxdm=2*maxrad;
-        rectangle('Position',[xcentre-maxrad, ycentre-maxrad, maxdm, maxdm], ...
-            'Curvature', [1,1], 'EdgeColor', 'blue', 'LineWidth', 2);
-
-%       rr2=maxrad*maxrad;
-        xo1=zeros(nnp,1);
-        xo2=zeros(nnp,1);
-        yo1=zeros(nnp,1);
-        yo2=zeros(nnp,1);
-        xi1=zeros(nnp,1);
-        xi2=zeros(nnp,1);
-        yi1=zeros(nnp,1);
-        yi2=zeros(nnp,1);
-
-        % Sections in upscaled version        
-        for nn=1:nnp
-            % Inner circle
-            aqi=sl(nn)*sl(nn)+1;
-            bqi=2*(sl(nn)*cc(nn)-sl(nn)*ycentre*scale-xcentre*scale);
-            cqi=xcentre*xcentre*scale*scale+cc(nn)*cc(nn)-2*cc(nn)*ycentre*scale+...
-                ycentre*ycentre*scale*scale-rad*rad*scale*scale;
-            ddi=bqi*bqi-4*aqi*cqi;
-            xi1(nn)=round((-bqi+sqrt(ddi))/(2*aqi));
-            xi2(nn)=round((-bqi-sqrt(ddi))/(2*aqi));
-            yi1(nn)=round(sl(nn)*xi1(nn)+cc(nn));
-            yi2(nn)=round(sl(nn)*xi2(nn)+cc(nn));
-
-            % Outer circle
-            aqo=sl(nn)*sl(nn)+1;
-            bqo=2*(sl(nn)*cc(nn)-sl(nn)*ycentre*scale-xcentre*scale);
-            cqo=xcentre*xcentre*scale*scale+cc(nn)*cc(nn)-2*cc(nn)*ycentre*scale+...
-                ycentre*ycentre*scale*scale-maxrad*maxrad*scale*scale;
-            ddo=bqo*bqo-4*aqo*cqo;
-            xo1(nn)=round((-bqo+sqrt(ddo))/(2*aqo));
-            xo2(nn)=round((-bqo-sqrt(ddo))/(2*aqo));
-            yo1(nn)=round(sl(nn)*xo1(nn)+cc(nn));
-            yo2(nn)=round(sl(nn)*xo2(nn)+cc(nn));
-        end;
-        % -------------------------------------------------------
-        % Optimise centre using centrosymmetric line profiles
-        % -------------------------------------------------------
-        % Upscaled calculations 
-
-        nsample=1000*scale;
-
-        lineprofile1=zeros(nsample,nnp);
-        lineprofile2=zeros(nsample,nnp);
-
-        if(maxshift > dedge)
-            maxshift=dedge-1;
-        end;
-        ssum=zeros(2*maxshift+1,2*maxshift+1);
-
-        % initial positions 
-        xi1_o=xi1;
-        xo1_o=xo1;
-        xi2_o=xi2;
-        xo2_o=xo2;
-        cc_o=cc;
-        
-        % Initialise waitbar
-        ProgBar = waitbar(0,'Please wait...','Name','Optimising centre',...
-            'CreateCancelBtn',...
-            'setappdata(gcbf,''canceling'',1)');
-        setappdata(ProgBar,'canceling',0)
-        full = length(-maxshift:maxshift);
-        count = 0;
-        
-        for ii=-maxshift:maxshift
-            count = count+1;
-            for jj=-maxshift:maxshift
-                xi1=xi1_o+jj*scale;
-                xo1=xo1_o+jj*scale;
-                xi2=xi2_o+jj*scale;
-                xo2=xo2_o+jj*scale;
-                cc=cc_o+ii*scale-jj*sl*scale;
-
-                for nn=1:nnp
-                    if (xi1(nn) < xo1(nn))
-                        xx=xi1(nn):(xo1(nn)-xi1(nn))/(nsample-1):xo1(nn);
-                    else
-                        xx=xo1(nn):(xi1(nn)-xo1(nn))/(nsample-1):xi1(nn);
+                    for nn=1:nnp
+                        vv=outline(nn,1)-xcentre;
+                        sl(nn)=(outline(nn,2)-ycentre)/vv;
+                        cc(nn)=scale*(outline(nn,2)-sl(nn)*outline(nn,1));
                     end;
-                    yy=sl(nn)*xx+cc(nn);
-                    % Downscale and get values
-                    xxd=round(xx/scale);
-                    yyd=round(yy/scale);
 
-                    indx=sub2ind(size(dp),yyd,xxd);
-                    lineprofile1(:,nn)=dp(indx);
+                    % The largest full circle in original scaling
+                    % Distances from centre close the dedge distance from the edge
 
-                    if (xi2(nn) < xo2(nn))
-                        xx=xi2(nn):(xo2(nn)-xi2(nn))/(nsample-1):xo2(nn);
-                    else
-                        xx=xo2(nn):(xi2(nn)-xo2(nn))/(nsample-1):xi2(nn);
+                    edist=zeros(4,1);
+                    edist(1)=abs(nx-xcentre)-dedge;
+                    edist(2)=abs(ny-ycentre)-dedge;
+                    edist(3)=xcentre-dedge;
+                    edist(4)=ycentre-dedge;
+                    p2=min(edist);
+                    Circle_p2 = rectangle('Position',[xcentre-p2, ycentre-p2, 2*p2, 2*p2], ...
+                        'Curvature', [1,1], 'EdgeColor', 'w', 'LineWidth', 2);  
+                    rad_opt = rad; % for plotting of Circle_User2
+
+                    xo1=zeros(nnp,1);
+                    xo2=zeros(nnp,1);
+                    yo1=zeros(nnp,1);
+                    yo2=zeros(nnp,1);
+                    xi1=zeros(nnp,1);
+                    xi2=zeros(nnp,1);
+                    yi1=zeros(nnp,1);
+                    yi2=zeros(nnp,1);
+
+                    % Sections in upscaled version        
+                    for nn=1:nnp
+                        % Inner circle
+                        aqi=sl(nn)*sl(nn)+1;
+                        bqi=2*(sl(nn)*cc(nn)-sl(nn)*ycentre*scale-xcentre*scale);
+                        cqi=xcentre*xcentre*scale*scale+cc(nn)*cc(nn)-2*cc(nn)*ycentre*scale+...
+                            ycentre*ycentre*scale*scale-rad*rad*scale*scale;
+                        ddi=bqi*bqi-4*aqi*cqi;
+                        xi1(nn)=round((-bqi+sqrt(ddi))/(2*aqi));
+                        xi2(nn)=round((-bqi-sqrt(ddi))/(2*aqi));
+                        yi1(nn)=round(sl(nn)*xi1(nn)+cc(nn));
+                        yi2(nn)=round(sl(nn)*xi2(nn)+cc(nn));
+
+                        % Outer circle
+                        aqo=sl(nn)*sl(nn)+1;
+                        bqo=2*(sl(nn)*cc(nn)-sl(nn)*ycentre*scale-xcentre*scale);
+                        cqo=xcentre*xcentre*scale*scale+cc(nn)*cc(nn)-2*cc(nn)*ycentre*scale+...
+                            ycentre*ycentre*scale*scale-p2*p2*scale*scale;
+                        ddo=bqo*bqo-4*aqo*cqo;
+                        xo1(nn)=round((-bqo+sqrt(ddo))/(2*aqo));
+                        xo2(nn)=round((-bqo-sqrt(ddo))/(2*aqo));
+                        yo1(nn)=round(sl(nn)*xo1(nn)+cc(nn));
+                        yo2(nn)=round(sl(nn)*xo2(nn)+cc(nn));
                     end;
-                    yy=sl(nn)*xx+cc(nn);
-                    % Downscale and get values
-                    xxd=round(xx/scale);
-                    yyd=round(yy/scale);
+                    % -------------------------------------------------------
+                    % Optimise centre using centrosymmetric line profiles
+                    % -------------------------------------------------------
+                    % Upscaled calculations 
+                    nsample=1000*scale;
 
-                    indx=sub2ind(size(dp),yyd,xxd);
-                    sindx=max(size(indx));
-                    indxt=zeros(1,nsample);
-                    indxt(1:1:sindx)=indx(sindx:-1:1);
-                    lineprofile2(:,nn)=dp(indxt);
+                    lineprofile1=zeros(nsample,nnp);
+                    lineprofile2=zeros(nsample,nnp);
 
-                    diff=lineprofile1(:,nn)-lineprofile2(:,nn);
-                    if(sum(isnan(diff)) == 0) 
-                        ssum(ii+maxshift+1,jj+maxshift+1)=ssum(ii+maxshift+1,jj+maxshift+1)+sum(diff.*diff);
+                    if(maxshift > dedge)
+                        maxshift=dedge-1;
                     end;
-                end;                
+                    ssum=zeros(2*maxshift+1,2*maxshift+1);
+
+                    % initial positions 
+                    xi1_o=xi1;
+                    xo1_o=xo1;
+                    xi2_o=xi2;
+                    xo2_o=xo2;
+                    cc_o=cc;
+
+                    % Initialise waitbar
+                    ProgBar = waitbar(0,'Please wait...','Name','Optimising centre',...
+                        'CreateCancelBtn',...
+                        'setappdata(gcbf,''canceling'',1)');
+                    setappdata(ProgBar,'canceling',0)
+                    full = length(-maxshift:maxshift);
+                    count = 0;
+                    br = 0; % flag for canceling
+
+                    for ii=-maxshift:maxshift
+                        count = count+1;
+                        for jj=-maxshift:maxshift
+                            xi1=xi1_o+jj*scale;
+                            xo1=xo1_o+jj*scale;
+                            xi2=xi2_o+jj*scale;
+                            xo2=xo2_o+jj*scale;
+                            cc=cc_o+ii*scale-jj*sl*scale;
+
+                            for nn=1:nnp
+                                if (xi1(nn) < xo1(nn))
+                                    xx=xi1(nn):(xo1(nn)-xi1(nn))/(nsample-1):xo1(nn);
+                                else
+                                    xx=xo1(nn):(xi1(nn)-xo1(nn))/(nsample-1):xi1(nn);
+                                end;
+                                yy=sl(nn)*xx+cc(nn);
+                                % Downscale and get values
+                                xxd=round(xx/scale);
+                                yyd=round(yy/scale);
+
+                                indx=sub2ind(size(dp),yyd,xxd);
+                                lineprofile1(:,nn)=dp(indx);
+
+                                if (xi2(nn) < xo2(nn))
+                                    xx=xi2(nn):(xo2(nn)-xi2(nn))/(nsample-1):xo2(nn);
+                                else
+                                    xx=xo2(nn):(xi2(nn)-xo2(nn))/(nsample-1):xi2(nn);
+                                end;
+                                yy=sl(nn)*xx+cc(nn);
+                                % Downscale and get values
+                                xxd=round(xx/scale);
+                                yyd=round(yy/scale);
+
+                                indx=sub2ind(size(dp),yyd,xxd);
+                                sindx=max(size(indx));
+                                indxt=zeros(1,nsample);
+                                indxt(1:1:sindx)=indx(sindx:-1:1);
+                                lineprofile2(:,nn)=dp(indxt);
+
+                                diff=lineprofile1(:,nn)-lineprofile2(:,nn);
+                                if(sum(isnan(diff)) == 0) 
+                                    ssum(ii+maxshift+1,jj+maxshift+1)=ssum(ii+maxshift+1,jj+maxshift+1)+sum(diff.*diff);
+                                end;
+                            end; 
+                        end;
+                        % Check for Cancel button press
+                        if getappdata(ProgBar,'canceling')
+                           br = 1;
+                           break;
+                        end;
+                        % Update waitbar
+                        waitbar(count/full,ProgBar,'Please wait...');
+                    end;
+                    delete(ProgBar);
+                    if br == 1
+                        figure(DPfig);
+                        delete(Centre_User)
+                        delete(Circle_p2)
+                        OPT = 1;
+                        continue
+                    end;
+                    
+                    % centre shift
+                    [~,optxys]=min(ssum(:));    % [optval,optxys]
+                    [optxs,optys]=ind2sub(size(ssum),optxys);
+                    optxshift=optys-maxshift-1;
+                    optyshift=optxs-maxshift-1;
+
+                    xcentre_opt=xcentre+optxshift;
+                    ycentre_opt=ycentre+optyshift;
+                    
+                    % -------------------------------------------------------
+                    % Plot the sum of optimised line profiles to test the fit
+                    % -------------------------------------------------------
+                    % Optimised line profile positions
+                    xi1=xi1_o+optxshift*scale;
+                    xo1=xo1_o+optxshift*scale;
+                    xi2=xi2_o+optxshift*scale;
+                    xo2=xo2_o+optxshift*scale;
+                    cc=cc_o+optyshift*scale-optxshift*sl*scale;
+                    
+                    sum_lineprofile1=zeros(nsample,1);
+                    sum_lineprofile2=zeros(nsample,1);
+
+                    for nn=1:nnp
+                        if (xi1(nn) < xo1(nn))
+                            xx=xi1(nn):(xo1(nn)-xi1(nn))/(nsample-1):xo1(nn);
+                        else
+                            xx=xo1(nn):(xi1(nn)-xo1(nn))/(nsample-1):xi1(nn);
+                        end;
+                        yy=sl(nn)*xx+cc(nn);
+                        % Downscale and get values
+                        xxd=round(xx/scale);
+                        yyd=round(yy/scale);
+
+                        indx=sub2ind(size(dp),yyd,xxd);
+                        lineprofile1(:,nn)=dp(indx);
+
+                        if (xi2(nn) < xo2(nn))
+                            xx=xi2(nn):(xo2(nn)-xi2(nn))/(nsample-1):xo2(nn);
+                        else
+                            xx=xo2(nn):(xi2(nn)-xo2(nn))/(nsample-1):xi2(nn);
+                        end;
+                        yy=sl(nn)*xx+cc(nn);
+                        % Downscale and get values
+                        xxd=round(xx/scale);
+                        yyd=round(yy/scale);
+
+                        indx=sub2ind(size(dp),yyd,xxd);
+                        sindx=max(size(indx));
+                        indxt=zeros(1,nsample);
+                        indxt(1:1:sindx)=indx(sindx:-1:1);
+                        lineprofile2(:,nn)=dp(indxt);
+
+                        if(sum(isnan(lineprofile1(:,nn))+isnan(lineprofile2(:,nn))) == 0)
+                            sum_lineprofile1=sum_lineprofile1+lineprofile1(:,nn);
+                            sum_lineprofile2=sum_lineprofile2+lineprofile2(:,nn);
+                        end;
+                    end;
+                    
+                    figure('Name','Centrefinder fit','NumberTitle','off');
+                    plot(sum_lineprofile1);
+                    hold all;
+                    plot(sum_lineprofile2);
+                    plot(sum_lineprofile1-sum_lineprofile2);
+                    legend('User line profile','Optimised line profile','Difference');
+        
+                case 'Amorphous'  %---------------------------------------
+                    % CentreOpt routine #2: by minimising sum of azimuthal variance
+                    % ----------------------------------------------------
+                    % Input dialog for optimisation parameters
+                    prompt = {'Enter size of grid scan (in pixels)'};
+                    def = {'10'}; % default value
+                    opt_input = inputdlg(prompt,'Optimisation parameters',1,def);
+                    if isempty(opt_input) 
+                        % User clicked cancel
+                        OPT = 0; % exit optimisation routine
+                        figure(DPfig);
+                        delete(Circle_User);
+                        delete(Centre_User);
+                        continue
+                    end 
+                    % input values into variables
+                    maxshift = str2double(opt_input{1});
+                    figure(DPfig);
+                    delete(Circle_User);
+                    % ----------------------------------------------------
+                    % Define limits for centre optimisation
+                    p1 = ceil(rad*0.75);
+                    p2 = ceil(rad+p1);
+                    Circle_p1 = rectangle('Position',[xcentre-p1, ycentre-p1, 2*p1, 2*p1], ...
+                        'Curvature', [1,1], 'EdgeColor', 'w', 'LineWidth', 2);
+                    Circle_p2 = rectangle('Position',[xcentre-p2, ycentre-p2, 2*p2, 2*p2], ...
+                        'Curvature', [1,1], 'EdgeColor', 'w', 'LineWidth', 2);
+                    % ----------------------------------------------------                    
+                    % Initialise waitbar
+                    ProgBar = waitbar(0,'Please wait...','Name','Optimising centre',...
+                    'CreateCancelBtn',...
+                    'setappdata(gcbf,''canceling'',1)');
+                    setappdata(ProgBar,'canceling',0);
+                    full = length(-maxshift:maxshift);
+                    count = 0;
+                    br = 0; % flag for canceling
+                    
+                    ssum=zeros(2*maxshift+1,2*maxshift+1);
+                    azavsize=p2-p1+1;
+                    
+                    for ii=-maxshift:maxshift
+                        count = count + 1;
+                         for jj=-maxshift:maxshift
+                             azav=zeros(azavsize,1);
+                             nazav=zeros(azavsize,1);
+                             m2=zeros(azavsize,1);
+                             delta=zeros(azavsize,1);
+                             % Mean & variance
+                             for xx=1:nx
+                                 for yy=1:ny
+                                     if (~isnan(dp(xx,yy)))
+                                         kk=ceil(sqrt((xx-ycentre+ii)^2+(yy-xcentre+jj)^2));
+                                         if (kk >= p1 && kk <= p2)
+                                             pp=kk-p1+1;
+                                             nazav(pp)=nazav(pp)+1;
+                                             delta(pp)=dp(xx,yy)-azav(pp);
+                                             azav(pp)=azav(pp)+delta(pp)./nazav(pp);
+                                             m2(pp)=m2(pp)+delta(pp)*(dp(xx,yy)-azav(pp));
+                                         end;
+                                     end;
+                                 end;
+                             end;
+                             % Check for Cancel button press in waitbar
+                             if getappdata(ProgBar,'canceling') 
+                                br = 1;
+                                break;
+                             end;
+                             azvar=m2./nazav;
+                             icount=-maxshift:maxshift==ii;
+                             jcount=-maxshift:maxshift==jj;
+                             ssum(icount,jcount)=sum(azvar.^2);
+                         end;
+                         if br == 1
+                             break;
+                         end;
+                         % Update waitbar
+                         waitbar(count/full,ProgBar,'Please wait...');
+                    end;
+                    delete(ProgBar);
+                    if br == 1
+                       figure(DPfig);
+                       delete(Centre_User)
+                       delete(Circle_p1)
+                       delete(Circle_p2)
+                       OPT = 1;
+                       continue
+                    end;
+                    
+                    [optval,optxys]=min(ssum(:)); %#ok<ASGLU>
+                    
+                    [optxs,optys]=ind2sub(size(ssum),optxys);
+                    optxshift=optys-maxshift-1;
+                    optyshift=optxs-maxshift-1;
+
+                    xcentre_opt=xcentre-optxshift;
+                    ycentre_opt=ycentre-optyshift;
+                    rad_opt = rad;
+
             end;
-            % Update waitbar
-            % Check for Cancel button press
-            if getappdata(ProgBar,'canceling')
-                break
+
+            if (abs(xcentre_opt-xcentre) == maxshift || abs(ycentre_opt-ycentre) == maxshift)
+                uiwait(msgbox({'Optimisation not successful!';
+                    'Increase maxshift or provide better initial guess.'},...
+                    'Error','error'));
+                OPT = 1;
+                figure(DPfig);
+                delete(Centre_User);
+                delete(Circle_p2);
+                try
+                    delete(Circle_p1);
+                catch
+                end;
+                continue
+            end;
+
+            figure(DPfig);
+            % Plot the initial circle
+            Circle_User2 = rectangle('Position',[xcentre-rad, ycentre-rad, 2*rad, 2*rad], ...
+                'Curvature', [1,1], 'EdgeColor', 'w', 'LineWidth', 2);
+            % Plot the optimised circle and centre
+            Centre_Opt = plot(xcentre_opt, ycentre_opt, 'g+', 'LineWidth', 1, 'MarkerSize', 20); 
+            Circle_Opt = rectangle('Position',[xcentre_opt-rad_opt, ycentre_opt-rad_opt, 2*rad_opt, 2*rad_opt], ...
+                'Curvature', [1,1], 'EdgeColor', 'g', 'LineWidth', 2);
+            try
+                Circle_p1_Opt = rectangle('Position',[xcentre_opt-p1, ycentre_opt-p1, 2*p1, 2*p1], ...
+                'Curvature', [1,1], 'EdgeColor', 'm', 'LineWidth', 2);
+            catch
+            end;
+            Circle_p2_Opt = rectangle('Position',[xcentre_opt-p2, ycentre_opt-p2, 2*p2, 2*p2], ...
+                'Curvature', [1,1], 'EdgeColor', 'm', 'LineWidth', 2);    
+            guidata(hObject,handles)
+
+            % -------------------------------------------------------
+            % Ask user to accept/reject optimisation
+            % -------------------------------------------------------
+            Accept_Opt = questdlg('Do you want to accept the optimised centre?',...
+                'Accept optimisation',...
+                'Yes, accept and continue',...
+                'No, use the centre that I chose before',...
+                'No, try optimisation again',...
+                'No, use the centre that I chose before');
+            switch Accept_Opt
+                case 'Yes, accept and continue'
+                    xcentre = xcentre_opt;
+                    ycentre = ycentre_opt;
+                    OPT = 0; %--- end while (optimisation) loop
+                    % --> continue with azimuthal average/variance routine
+                case 'No, use the centre that I chose before'
+                    OPT = 0; %--- end while (optimisation) loop
+                    % use user defined centre 
+                    % --> continue with azimuthal average/variance routine
+                case 'No, try optimisation again'
+                    figure(DPfig);
+                    delete(Centre_User);
+                    delete(Centre_Opt);
+                    delete(Circle_User2);
+                    delete(Circle_Opt);
+                    delete(Circle_p2);
+                    delete(Circle_p2_Opt);
+                    try
+                        delete(Circle_p1);
+                        delete(Circle_p1_Opt);
+                    catch
+                    end;
+                    OPT = 1;
             end
-            waitbar(count/full,ProgBar,'Please wait...');
-        end;
-        delete(ProgBar);
-        
-        [~,optxys]=min(ssum(:));
-
-        % Optimised centre
-        [optxs,optys]=ind2sub(size(ssum),optxys);
-        optxshift=optys-maxshift-1;
-        optyshift=optxs-maxshift-1;
-
-        xcentre_opt=xcentre+optxshift;
-        ycentre_opt=ycentre+optyshift;
-
-        % Plot the initial circles and centre
-        rectangle('Position',[xcentre-rad, ycentre-rad, dm, dm], ...
-            'Curvature', [1,1], 'EdgeColor', 'white', 'LineWidth', 2);
-
-        rectangle('Position',[xcentre-maxrad, ycentre-maxrad, maxdm, maxdm], ...
-            'Curvature', [1,1], 'EdgeColor', 'blue', 'LineWidth', 2);
-        plot(xcentre, ycentre,  'r+', 'LineWidth', 1, 'MarkerSize', 20);        
-
-        % Plot the optimised circles and centre
-        rectangle('Position',[xcentre_opt-rad, ycentre_opt-rad, dm, dm], ...
-            'Curvature', [1,1], 'EdgeColor', 'green', 'LineWidth', 2);
-
-        rectangle('Position',[xcentre_opt-maxrad, ycentre_opt-maxrad, maxdm, maxdm], ...
-            'Curvature', [1,1], 'EdgeColor', 'cyan', 'LineWidth', 2);
-
-        plot(xcentre_opt, ycentre_opt,  'g+', 'LineWidth', 1, 'MarkerSize', 20);        
-
-        % Optimised line profile positions
-        xi1=xi1_o+optxshift*scale;
-        xo1=xo1_o+optxshift*scale;
-        xi2=xi2_o+optxshift*scale;
-        xo2=xo2_o+optxshift*scale;
-        cc=cc_o+optyshift*scale-optxshift*sl*scale;
-        
-        % -------------------------------------------------------
-        % Plot the sum of optimised line profiles to test the fit
-        % -------------------------------------------------------
-
-        sum_lineprofile1=zeros(nsample,1);
-        sum_lineprofile2=zeros(nsample,1);
-        
-        for nn=1:nnp
-            if (xi1(nn) < xo1(nn))
-                xx=xi1(nn):(xo1(nn)-xi1(nn))/(nsample-1):xo1(nn);
-            else
-                xx=xo1(nn):(xi1(nn)-xo1(nn))/(nsample-1):xi1(nn);
-            end;
-            yy=sl(nn)*xx+cc(nn);
-            % Downscale and get values
-            xxd=round(xx/scale);
-            yyd=round(yy/scale);
-
-            indx=sub2ind(size(dp),yyd,xxd);
-            lineprofile1(:,nn)=dp(indx);
-
-            if (xi2(nn) < xo2(nn))
-                xx=xi2(nn):(xo2(nn)-xi2(nn))/(nsample-1):xo2(nn);
-            else
-                xx=xo2(nn):(xi2(nn)-xo2(nn))/(nsample-1):xi2(nn);
-            end;
-            yy=sl(nn)*xx+cc(nn);
-            % Downscale and get values
-            xxd=round(xx/scale);
-            yyd=round(yy/scale);
-
-            indx=sub2ind(size(dp),yyd,xxd);
-            sindx=max(size(indx));
-            indxt=zeros(1,nsample);
-            indxt(1:1:sindx)=indx(sindx:-1:1);
-            lineprofile2(:,nn)=dp(indxt);
-
-            if(sum(isnan(lineprofile1(:,nn))+isnan(lineprofile2(:,nn))) == 0)
-                sum_lineprofile1=sum_lineprofile1+lineprofile1(:,nn);
-                sum_lineprofile2=sum_lineprofile2+lineprofile2(:,nn);
-            end;
-        end;
-        
-        figure('Name','Centrefinder fit','NumberTitle','off');
-        plot(sum_lineprofile1);
-        hold all;
-        plot(sum_lineprofile2);
-        plot(sum_lineprofile1-sum_lineprofile2);
-        legend('Line profile 1','Line profile 2','Difference');
-
-        % -------------------------------------------------------
-        % Ask user to accept/reject optimisation
-        % -------------------------------------------------------
-        choice = questdlg('Do you want to accept the optimised centre?',...
-            'Accept optimisation',...
-            'Yes, accept and continue with optimisation',...
-            'No, use the centre that I chose before',...
-            'No, use the centre that I chose before');
-        switch choice
-            case 'Yes, accept and continue with optimisation'
-                xcentre = xcentre_opt;
-                ycentre = ycentre_opt;
-                % --> continue with azav/azvar routine
-            case 'No, use the centre that I chose before'
-                % do nothing --> continue with azav/azvar routine
-        end     
+    end
 end
 % ------------------------------------------------------- 
-%% Ask user to choose directory to save files
-folder = uigetdir(pname,'Select/create folder to save output');
-addpath(folder);
-handles.folder = folder;
-guidata(hObject,handles)
-
-%% Calculate azimuthal average and variance with known centre (xcentre, ycentre)
-
+%% Calculate azimuthal average and variance with centre (xcentre, ycentre)
+% -------------------------------------------------------
 % Distances from corners to the centre of the diffraction pattern
+% Original scale
+
 cdist=zeros(4,1);
 cdist(1)=sqrt((nx-xcentre)^2+(ny-ycentre)^2);
 cdist(2)=sqrt((xcentre)^2+(ny-ycentre)^2);
 cdist(3)=sqrt((nx-xcentre)^2+(ycentre)^2);
 cdist(4)=sqrt((xcentre)^2+(ycentre)^2);
 
-azavsize=round(max(cdist))+1;
-azav=zeros(azavsize,1);
-azvar=zeros(azavsize,1);
-nazav=zeros(azavsize,1);
+azsize=ceil(max(cdist));
+azav=zeros(azsize,1);
+nazav=zeros(azsize,1);
+m2=zeros(azsize,1);
+delta=zeros(azsize,1);
 
-% Mean -------------------------------------------------
+% Mean & variance
 for xx=1:nx
-    for yy=1:ny
-        if (~isnan(dp(xx,yy))) 
-            kk=sqrt((xx-ycentre)^2+(yy-xcentre)^2)+1;
-            azav(round(kk))=azav(round(kk))+dp(xx,yy);
-            nazav(round(kk))=nazav(round(kk))+1;
-        end;
-    end;
+     for yy=1:ny
+         if (~isnan(dp(yy,xx)))
+             kk=ceil(sqrt((xx-xcentre)^2+(yy-ycentre)^2));
+             nazav(kk)=nazav(kk)+1;
+             delta(kk)=dp(yy,xx)-azav(kk);
+             azav(kk)=azav(kk)+delta(kk)./nazav(kk);
+             m2(kk)=m2(kk)+delta(kk)*(dp(yy,xx)-azav(kk));
+         end;
+     end;
 end;
-
-% Variance ----------------------------------------------
-for xx=1:nx
-    for yy=1:ny
-        if (~isnan(dp(xx,yy))) 
-            kk=sqrt((xx-xcentre)^2+(yy-ycentre)^2)+1;
-            azvar(round(kk))=azvar(round(kk))+(dp(xx,yy)-azav(round(kk)))^2;
-        end;
-    end;
-end;
-
-%% plot and write average and variance data
-
-% Append data and plot filenames to DP filename
-DPfname = handles.DPfname;
-folder = handles.folder;
-azav_name = sprintf('%s/%s_azav.txt',folder,DPfname);
-handles.azav_name = azav_name;
-azvar_name = sprintf('%s/%s_azvar.txt',folder,DPfname);
-azav_plot = sprintf('%s/%s_azav',folder,DPfname);
-azvar_plot = sprintf('%s/%s_azvar',folder,DPfname);
-
-% Mean ----------------------------------
-azav=azav./nazav;
-handles.azav = azav;
-save (azav_name,'azav','-ASCII');
-
-% Variance ------------------------------
-azvar=azvar./nazav;
-handles.azvar = azvar;
-save (azvar_name,'azvar','-ASCII');
-% Normalized variance
+azvar=m2./nazav;
+% Normalized variance -------
 % nazvar=azvar./(azav.*azav);
 % handles.nazvar = nazvar;
+handles.azav = azav;
+handles.azvar = azvar;
+guidata(hObject,handles)
+% -------------------------------------------------------
+% Plot and save average and variance data
+% -------------------------------------------------------
+% x-axis for plots (pixel index)
+pix_xax = linspace(1,azsize,azsize);
+%q_xax = pix_xax' * handles.ds*2*pi;
 
-%x-axis for plots ----------------------
-pix_xax = linspace(1,azavsize,azavsize);
-q_xax = pix_xax' * handles.ds*2*pi;
-
-% Plot and save Azimuthal Average
+% Azimuthal Average
 figure('Name','Azimuthal Average','NumberTitle','off');
-plot(q_xax,azav);
-xlabel('q(Å^{-1})');
+plot(pix_xax,azav);
+xlabel('Pixel');
 ylabel('Intensity');
-print(gcf,azav_plot,'-dpng');
-% savefig(azav_plot);
 
-% Plot and save Azimuthal Variance 
+% Azimuthal Variance 
 figure('Name','Azimuthal Variance','NumberTitle','off');
-plot(q_xax,azvar);
-xlabel('q(Å^{-1})');
+plot(pix_xax,azvar);
+xlabel('Pixel');
 ylabel('Intensity');
-print(gcf,azvar_plot,'-dpng');
-% savefig(azvar_plot);
+% -------------------------------------------------------
+% Ask user to choose directory to save files
+% -------------------------------------------------------
+folder = uigetdir(pname,'Select/create folder to save output');
+if folder == 0
+	% User clicked the Cancel button.
+	return;
+end
+addpath(folder);
+handles.folder = folder;
+guidata(hObject,handles)
+
+azav_name = sprintf('%s/%s_azav.txt',handles.folder,handles.DPfname);
+save (azav_name,'azav','-ASCII');
+% T_azav = table(pix_xax,azav,...
+%     'VariableNames',{'Pixel' 'Intensity'});
+% writetable(T_azav,azav_name);
+azvar_name = sprintf('%s/%s_azvar.txt',handles.folder,handles.DPfname);
+save (azvar_name,'azvar','-ASCII');
+% T_azvar = table(pix_xax,azvar,...
+%     'VariableNames',{'Pixel' 'Intensity'});
+% writetable(T_azvar,azvar_name);
 
 %% Prompt user to continue with RDF Analysis
-msgbox({'Azimuthal Average and Variance data and plots';
-    'have been saved in your preferred folder.';
-    'Click Open next to "Choose average intensity data"';
-    'and choose relevant "azav.txt" file for further analysis.'});
+msgbox({'Azimuthally averaged intensity and variance data have been saved.';
+    'Open saved "azav.txt" file for further analysis.'});
 
 guidata(hObject,handles)
+% -------------------------------------------------------
 
 % ----------------------------------------------------------------------
 % --- Executes on button press in Button_OpenData.
@@ -693,6 +850,10 @@ function Button_OpenData_Callback(hObject, eventdata, handles)
 [filename,pathname] = uigetfile(...
     {'*.txt','Text files';'*.*','All files (*.*)';},...
     'Choose input data file');
+if filename == 0
+	% User clicked the Cancel button
+	return;
+end
 addpath(pathname);
 rehash toolboxcache;
 dat = load(filename,'-ascii');
@@ -717,40 +878,10 @@ index = num.'; %transpose
 handles.index = index;
 
 guidata(hObject,handles)
-
 % -----------------------------------------------------------------------
 % ----------------------------------------------------------------------
-% --- Executes during object creation, after setting all properties.
-function DPSize_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to DPSize (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
 
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
 
-function DPSize_Callback(hObject, eventdata, handles)
-% hObject    handle to DPSize (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of DPSize as text
-%        str2double(get(hObject,'String')) returns contents of DPSize as a double
-% --- dpsize: center of DP
-DPSize = str2double(get(hObject,'String'));
-if isnan(DPSize)
-    set(hObject, 'String', 0);
-    errordlg('Input must be a number','Error');
-end
-handles.DPSize = DPSize;
-
-guidata(hObject,handles)
-
-% -----------------------------------------------------------------------
-% ----------------------------------------------------------------------
 % --- Executes during object creation, after setting all properties.
 function d1_CreateFcn(hObject, eventdata, handles)
 % hObject    handle to d1 (see GCBO)
@@ -804,6 +935,11 @@ d2 = str2double(get(hObject,'String'));
 if isnan(d2)
     set(hObject, 'String', 0);
     errordlg('Input must be a number','Error');
+end
+if d2 > length(handles.index)
+    max_index = max(handles.index);
+    set(hObject, 'String', max_index);
+    errordlg('Input exceeds data range','Error');
 end
 handles.d2 = d2;
 guidata(hObject,handles)
@@ -861,7 +997,7 @@ function Button_Iq_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % convert pixel values to q
-index = handles.x-handles.DPSize;
+index = handles.x;
 q = index*handles.ds*2*pi;
 handles.q = q;
 
@@ -1482,27 +1618,6 @@ guidata(hObject,handles)
 % -----------------------------------------------------------------------
 % -----------------------------------------------------------------------
 
-% --- Executes when selected object is changed in AutoFitSelection.
-function AutoFitSelection_SelectionChangedFcn(hObject, eventdata, handles)
-% hObject    handle to the selected object in AutoFitSelection 
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-%	EventName: string 'SelectionChanged' (read only)
-%	OldValue: handle of the previously selected object or empty
-%	NewValue: handle of the currently selected object
-
-% User selection of q range for weighted automated fitting of atomic scattering curve
-switch get(eventdata.NewValue,'Tag')
-    case 'AutoFitOption1' %Fit over full q range - DEFAULT
-        AFrange = 0;
-    case 'AutoFitOption2' %Fit only over tail end (last 1/3 of q range)
-        AFrange = 2/3*handles.L;
-end
-handles.AFrange = AFrange; %to be read into %weights in button_AutoFit_callback
-guidata(hObject,handles)
-% -----------------------------------------------------------------------
-% -----------------------------------------------------------------------
-
 % --- Executes on button press in button_Autofit.
 function button_Autofit_Callback(hObject, eventdata, handles)
 % hObject    handle to button_Autofit (see GCBO)
@@ -1719,7 +1834,13 @@ L = handles.L;
 
 % Selection of weights based on AutoFitSelection
 wi = ones(L,1);
-AFrange = handles.AFrange; %retrieve user selection or use default
+AFselection = get(get(handles.AutoFitSelection,'SelectedObject'),'Tag');
+switch AFselection 
+    case 'AutoFitOption1'  %Fit over full q range - DEFAULT
+        AFrange = 0;
+    case 'AutoFitOption2' %Fit only over tail end (last 1/3 of q range)
+        AFrange = 2/3*handles.L;
+end
 wi(1:AFrange) = 0; 
 
 % qmax: point where fitted curve crosses Iq curve 
