@@ -7,10 +7,7 @@ This tool is available as open source code and in open executable form (both cov
 
 eRDF Analyser GUI requires the following files to run: 'RDF_Analyser_GUI.fig', 'RDF_Analyser_GUI.m', 'Kirkland_2010'.txt and 'Lobato_2014.txt'. All files can be found in Release Downloads (Source Code). The executable (eRDFAnalyser.exe) runs on Windows OS only. It requires MATLAB Runtime version 9.0 (2015b) to run - this can be downloaded from http://www.mathworks.com/products/compiler/mcr/index.html (one-time installation).
 
-Contact Information:
+Contact Information (Updated):
 
-J Shanmugam (janaki.shanmugam@materials.ox.ac.uk),
-KB Borisenko (konstantin.borisenko@materials.ox.ac.uk)
-Electron Image Analysis Group,
-Department of Materials, 
-University of Oxford
+J Shanmugam (shanmugamjanaki@gmail.com),
+KB Borisenko
